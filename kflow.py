@@ -145,10 +145,25 @@ class VCGEdge(object):
 
 
 def beijing_timestamp():
-    utc_time = datetime.datetime.utcnow()
-    beijing_tz = datetime.timezone(datetime.timedelta(hours=8))
-    beijing_time = utc_time.astimezone(beijing_tz)
-    return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
+    # 获取当前的UTC时间
+    utc_now = datetime.datetime.utcnow()
+    # 加上8个小时的偏移量
+    beijing_now = utc_now + datetime.timedelta(hours=8)
+    # 转换为1970年1月1日以来的秒数
+    beijing_timestamp = beijing_now.timestamp()
+    # 转换为datetime.datetime对象
+    beijing_datetime = datetime.datetime.fromtimestamp(beijing_timestamp)
+    # 按照指定的格式输出字符串
+    beijing_string = beijing_datetime.strftime("%Y/%m/%d %H:%M:%S")
+    # 返回结果
+    return beijing_string
+
+
+# def beijing_timestamp():
+#     utc_time = datetime.datetime.utcnow()
+#     beijing_tz = datetime.timezone(datetime.timedelta(hours=8))
+#     beijing_time = utc_time.astimezone(beijing_tz)
+#     return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
 
 
 def check_python_version():
@@ -271,6 +286,15 @@ def handle_scan(args):
     logger.info(f"handle kflow scan done! {begin_time} - {end_time}")
 
 
+def get_sqltable_record_num(cursor, table_name):
+    try:
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        count = cursor.fetchone()[0]
+        return (True, count)
+    except Exception as e:
+        return (False, str(e))
+
+
 def handle_stat(args):
     logger = args.logger
     begin_time = beijing_timestamp()
@@ -281,40 +305,28 @@ def handle_stat(args):
     db_file_path = os.path.abspath(args.output)
     if not os.path.isfile(db_file_path):
         logger.error(f" Database file {db_file_path} not found!")
-    print(f"using {db_file_path}")
+    logger.info(f"using {db_file_path}")
 
     conn = sqlite3.connect(args.output, timeout=120)
     cursor = conn.cursor()
-
-    try:
-        cursor.execute("SELECT COUNT(*) FROM KFLOW")
-    except Exception:
-        print(f" Makesure {db_file_path} exists and file type ok")
-        cursor.close()
-        conn.close()
-        exit(1)
-
-    result = cursor.fetchone()
-    if result:
-        print(f"KFLOW 表格的记录数量为 {result[0]}")
+    logger.info("-" * 30)
+    (status, info) = get_sqltable_record_num(cursor, "KFLOW_GRAPH")
+    if status:
+        logger.info(f" graph/ci total: {info} ")
     else:
-        print("KFLOW 为空表，请先执行 ' kflow scan ' 生成数据")
-        exit(0)
-
-    try:
-        cursor.execute("SELECT COUNT(*) FROM KFLOW WHERE PPATH IS NOT NULL ")
-    except Exception:
-        print(f" Makesure {db_file_path} exists and file type ok")
-        cursor.close()
-        conn.close()
-        exit(1)
-
-    result = cursor.fetchone()
-    if result:
-        print(f"KFLOW 重复文件数量为 {result[0]}")
+        logger.info(f" get graph/ci total failed! {info}")
+    (status, count) = get_sqltable_record_num(cursor, "KFLOW_NODE")
+    if status:
+        logger.info(f" node     total: {info} ")
     else:
-        print("没有发现重复的文件")
+        logger.info(f" get node failed! {info}")
+    (status, count) = get_sqltable_record_num(cursor, "KFLOW_EDGE")
+    if status:
+        logger.info(f" edge     total: {info} ")
+    else:
+        logger.info(f" get edge failed! {info}")
 
+    logger.info("-" * 30)
     cursor.close()
     conn.close()
 

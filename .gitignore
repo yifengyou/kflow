@@ -1,3 +1,5 @@
+kflow.db
+kflow.log
 test
 test-*
 *.txt
