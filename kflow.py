@@ -349,6 +349,35 @@ def setting_logger(args):
     return logger
 
 
+def handle_query(args):
+    logger = args.logger
+    begin_time = beijing_timestamp()
+
+    workdir = os.path.abspath(args.workdir)
+    logger.info(f"WORKDIR {workdir}")
+
+    db_file_path = os.path.abspath(args.output)
+    if not os.path.isfile(db_file_path):
+        logger.error(f" Database file {db_file_path} not found!")
+    logger.info(f"using {db_file_path}")
+
+    conn = sqlite3.connect(args.output, timeout=120)
+    cursor = conn.cursor()
+    logger.info("-" * 30)
+
+    cursor.execute(f"SELECT * FROM {args.table} LIMIT {args.number}")
+    records = cursor.fetchall()
+    for record in records:
+        print(record)
+
+    logger.info("-" * 30)
+    cursor.close()
+    conn.close()
+
+    end_time = beijing_timestamp()
+    print(f"handle kflow stat done! {begin_time} - {end_time}")
+
+
 def main():
     global CURRENT_VERSION
     check_python_version()
@@ -378,6 +407,14 @@ def main():
     # 添加子命令 stat
     parser_stat = subparsers.add_parser('stat', parents=[parent_parser])
     parser_stat.set_defaults(func=handle_stat)
+
+    # 添加子命令 query
+    parser_query = subparsers.add_parser('query', parents=[parent_parser])
+    parser_query.add_argument('-t', '--table', default='KFLOW_GRAPH',
+                              help="show specific table info, default KFLOW_GRAPH")
+    parser_query.add_argument('-n', '--number', default=20, type=int,
+                              help="show number record of table")
+    parser_query.set_defaults(func=handle_query)
 
     # 开始解析命令
     args = parser.parse_args()
