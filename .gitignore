@@ -1,3 +1,11 @@
+test
+test-*
+*.txt
+*.db
+back
+.back
+back*
+
 # Prerequisites
 *.d
 
