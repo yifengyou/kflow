@@ -315,12 +315,12 @@ def handle_stat(args):
         logger.info(f" graph/ci total: {info} ")
     else:
         logger.info(f" get graph/ci total failed! {info}")
-    (status, count) = get_sqltable_record_num(cursor, "KFLOW_NODE")
+    (status, info) = get_sqltable_record_num(cursor, "KFLOW_NODE")
     if status:
         logger.info(f" node     total: {info} ")
     else:
         logger.info(f" get node failed! {info}")
-    (status, count) = get_sqltable_record_num(cursor, "KFLOW_EDGE")
+    (status, info) = get_sqltable_record_num(cursor, "KFLOW_EDGE")
     if status:
         logger.info(f" edge     total: {info} ")
     else:
