@@ -367,8 +367,16 @@ def handle_query(args):
 
     cursor.execute(f"SELECT * FROM {args.table} LIMIT {args.number}")
     records = cursor.fetchall()
+
+    if len(records) == 0:
+        logger.info(f" no record found in {args.table}")
     for record in records:
-        print(record)
+        column_names = [cursor[0] for cursor in cursor.description]
+        record_dict = dict(zip(column_names, record))
+        info = ""
+        for key, value in record_dict.items():
+            info += f"{key}:{value} "
+        logger.info(info)
 
     logger.info("-" * 30)
     cursor.close()
