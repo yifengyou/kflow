@@ -1,3 +1,6 @@
+.csv
+data
+neo4j
 kflow.db
 kflow.log
 test

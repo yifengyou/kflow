@@ -7,6 +7,7 @@
 """
 
 import argparse
+import csv
 import datetime
 import json
 import logging
@@ -310,21 +311,15 @@ def handle_stat(args):
     conn = sqlite3.connect(args.output, timeout=120)
     cursor = conn.cursor()
     logger.info("-" * 30)
-    (status, info) = get_sqltable_record_num(cursor, "KFLOW_GRAPH")
-    if status:
-        logger.info(f" graph/ci total: {info} ")
-    else:
-        logger.info(f" get graph/ci total failed! {info}")
-    (status, info) = get_sqltable_record_num(cursor, "KFLOW_NODE")
-    if status:
-        logger.info(f" node     total: {info} ")
-    else:
-        logger.info(f" get node failed! {info}")
-    (status, info) = get_sqltable_record_num(cursor, "KFLOW_EDGE")
-    if status:
-        logger.info(f" edge     total: {info} ")
-    else:
-        logger.info(f" get edge failed! {info}")
+
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'KFLOW%'")
+    tables = cursor.fetchall()
+    for table in tables:
+        (status, info) = get_sqltable_record_num(cursor, table[0])
+        if status:
+            logger.info(f" {table[0]} total: {info} ")
+        else:
+            logger.info(f" get {table[0]} failed! {info}")
 
     logger.info("-" * 30)
     cursor.close()
@@ -375,8 +370,59 @@ def handle_query(args):
         record_dict = dict(zip(column_names, record))
         info = ""
         for key, value in record_dict.items():
-            info += f"{key}:{value} "
+            info += f"{key}:{repr(value)} "
         logger.info(info)
+
+    logger.info("-" * 30)
+    cursor.close()
+    conn.close()
+
+    end_time = beijing_timestamp()
+    print(f"handle kflow stat done! {begin_time} - {end_time}")
+
+
+def export_csv(cursor, table_name):
+    cursor.execute(f"SELECT * FROM {table_name}")
+    data = cursor.fetchall()
+    col_names = [description[0] for description in cursor.description]
+
+    with open(f"{table_name}.csv", 'w', encoding='UTF8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(col_names)
+        writer.writerows(data)
+    return len(data)
+
+
+def handle_export(args):
+    logger = args.logger
+    begin_time = beijing_timestamp()
+
+    workdir = os.path.abspath(args.workdir)
+    logger.info(f"WORKDIR {workdir}")
+
+    db_file_path = os.path.abspath(args.output)
+    if not os.path.isfile(db_file_path):
+        logger.error(f" Database file {db_file_path} not found!")
+    logger.info(f"using {db_file_path}")
+
+    conn = sqlite3.connect(args.output, timeout=120)
+    cursor = conn.cursor()
+    logger.info("-" * 30)
+
+    if args.table == "all":
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'KFLOW%'")
+        tables = cursor.fetchall()
+        for table in tables:
+            num = export_csv(cursor, table[0])
+            logger.info(f" export {table[0]} done! [{num}]")
+    else:
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (args.table))
+        result = cursor.fetchone()[0]
+        if result:
+            num = export_csv(cursor, result)
+            logger.info(f" export {result} done! [{num}]")
+        else:
+            logger.error(f" no table named {result} found!")
 
     logger.info("-" * 30)
     cursor.close()
@@ -423,6 +469,12 @@ def main():
     parser_query.add_argument('-n', '--number', default=20, type=int,
                               help="show number record of table")
     parser_query.set_defaults(func=handle_query)
+
+    # 添加子命令 export
+    parser_export = subparsers.add_parser('export', parents=[parent_parser])
+    parser_export.add_argument('-t', '--table', default='all',
+                               help="export specific table (tablename start with KFLOW)")
+    parser_export.set_defaults(func=handle_export)
 
     # 开始解析命令
     args = parser.parse_args()
