@@ -484,6 +484,52 @@ def handle_neo4j(args):
         session.run("CREATE DATABASE KFLOW")
         print("Database KFLOW created successfully.")
 
+    import time
+    time.sleep(10)
+
+    def create_function_call_graph(session, function_name, call_list):
+        try:
+            # 创建函数节点
+            session.run("MERGE (f:Function {name: $function_name})", function_name=function_name)
+            # 遍历调用列表，创建被调用函数节点和CALLS关系
+            for called_function in call_list:
+                session.run("MERGE (c:Function {name: $called_function})", called_function=called_function)
+                session.run(
+                    "MATCH (f:Function {name: $function_name}), (c:Function {name: $called_function}) MERGE (f)-[:CALLS]->(c)",
+                    function_name=function_name, called_function=called_function)
+                # logger.info(f" add {function_name} call {called_function}")
+        except Exception as e:
+            logger.error(f" created failed! {str(e)}")
+
+    # with driver.session(database=DBNAME) as session:
+    #     # 调用create_function_call_graph方法，创建一个函数调用关系图，示例数据如下
+    #     create_function_call_graph(session, "main", ["foo", "bar", "baz"])
+    #     create_function_call_graph(session, "main", ["foo", "bar", "baz"])
+    #     create_function_call_graph(session, "foo", ["qux", "quux"])
+    #     create_function_call_graph(session, "foo", ["qux", "quux"])
+    #     create_function_call_graph(session, "bar", ["corge", "grault"])
+    #     create_function_call_graph(session, "baz", ["garply", "waldo"])
+    #     create_function_call_graph(session, "lonely", [])
+
+    with driver.session(database=DBNAME) as session:
+        conn = sqlite3.connect(args.output, timeout=120)
+        cursor = conn.cursor()
+        logger.info("-" * 30)
+
+        cursor.execute(f"-- SELECT * FROM KFLOW_EDGE LIMIT 10000")
+        cursor.execute(f"SELECT * FROM KFLOW_EDGE")
+        records = cursor.fetchall()
+
+        if len(records) == 0:
+            logger.info(f" no record found in KFLOW_EDGE")
+        for record in records:
+            logger.info(record)
+            create_function_call_graph(session, record[1], [record[2]])
+
+        logger.info("-" * 30)
+        cursor.close()
+        conn.close()
+
     driver.close()
     end_time = beijing_timestamp()
     print(f"handle neo4j stat done! {begin_time} - {end_time}")
