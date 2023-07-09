@@ -30,8 +30,10 @@ neo4j-daemon:
     -v $(WORKDIR)/neo4j/logs:/logs \
     -v $(WORKDIR)/neo4j/import:/var/lib/neo4j/import \
     -v $(WORKDIR)/neo4j/plugins:/plugins \
+    -v $(WORKDIR):/kernel \
+    -e NEO4J_ACCEPT_LICENSE_AGREEMENT=yes \
     -e NEO4J_AUTH="neo4j/yifengyou" \
-    neo4j:latest
+    neo4j:enterprise
 	@docker ps -a
 
 
@@ -39,10 +41,14 @@ neo4j-daemon:
 neo4j-destroy:
 	@docker container rm --force neo4j
 	@docker container prune -f
+	@rm -rf neo4j
 	@echo "neo4j-destroy done!"
 
 
 
+neo4j-attach:
+	@docker exec -it neo4j /bin/bash
+	@echo "neo4j-attach done!"
 
 
 

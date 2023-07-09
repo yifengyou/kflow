@@ -260,6 +260,7 @@ def handle_scan(args):
         f" SOURCENAME TEXT , "
         f" TARGETNAME TEXT , "
         f" LABEL TEXT , "
+        f" TYPE TEXT DEFAULT 'CALLS' , "
         f" GRAPH TEXT , "
         f" PATH TEXT"
         f")"
@@ -381,14 +382,19 @@ def handle_query(args):
     print(f"handle kflow stat done! {begin_time} - {end_time}")
 
 
-def export_csv(cursor, table_name):
+def export_csv(cursor, table_name, title=None):
     cursor.execute(f"SELECT * FROM {table_name}")
     data = cursor.fetchall()
     col_names = [description[0] for description in cursor.description]
-
+    print("title", title)
     with open(f"{table_name}.csv", 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(col_names)
+        if title is None:
+            writer.writerow(col_names)
+        elif isinstance(title, list):
+            writer.writerow(title)
+        else:
+            raise (" export csv title must be list or default value!")
         writer.writerows(data)
     return len(data)
 
@@ -409,7 +415,18 @@ def handle_export(args):
     cursor = conn.cursor()
     logger.info("-" * 30)
 
-    if args.table == "all":
+    if args.neo4j:
+        title = ["NUM:long", ":ID(Function)", "LABEL:string", "SHAPE:string",
+                 "GRAPH:string", "PATH:string"]
+        num = export_csv(cursor, 'KFLOW_NODE', title)
+        logger.info(f" export KFLOW_NODE done! [{num}]")
+
+        title = ["NUM:long", ":START_ID(Function)", ":END_ID(Function)", "LABEL:string", "TYPE:string",
+                 "GRAPH:string", "PATH:string"]
+        num = export_csv(cursor, 'KFLOW_EDGE', title)
+        logger.info(f" export KFLOW_EDGE done! [{num}]")
+
+    elif args.table == "all":
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'KFLOW%'")
         tables = cursor.fetchall()
         for table in tables:
@@ -430,6 +447,46 @@ def handle_export(args):
 
     end_time = beijing_timestamp()
     print(f"handle kflow stat done! {begin_time} - {end_time}")
+
+
+def handle_neo4j(args):
+    logger = args.logger
+    begin_time = beijing_timestamp()
+
+    workdir = os.path.abspath(args.workdir)
+    logger.info(f"WORKDIR {workdir}")
+
+    db_file_path = os.path.abspath(args.output)
+    if not os.path.isfile(db_file_path):
+        logger.error(f" Database file {db_file_path} not found!")
+    logger.info(f"using {db_file_path}")
+
+    from neo4j import GraphDatabase
+
+    URI = "neo4j://localhost"
+    AUTH = ("neo4j", "yifengyou")
+    DBNAME = "kflow"
+    try:
+        driver = GraphDatabase.driver(URI, auth=AUTH)
+        driver.verify_connectivity()
+        logger.info("connected successfully")
+    except Exception as e:
+        logger.error(f"connect neo4j failed! {str(e)}")
+        exit(1)
+    # 判断数据库是否存在，如果存在则删除重建
+    try:
+        with driver.session(database=DBNAME) as session:
+            session.run(f"DROP DATABASE {DBNAME}")
+            print(f"Database {DBNAME} exists! dropped successfully.")
+    except Exception:
+        pass
+    with driver.session() as session:
+        session.run("CREATE DATABASE KFLOW")
+        print("Database KFLOW created successfully.")
+
+    driver.close()
+    end_time = beijing_timestamp()
+    print(f"handle neo4j stat done! {begin_time} - {end_time}")
 
 
 def main():
@@ -474,7 +531,13 @@ def main():
     parser_export = subparsers.add_parser('export', parents=[parent_parser])
     parser_export.add_argument('-t', '--table', default='all',
                                help="export specific table (tablename start with KFLOW)")
+    parser_export.add_argument('--neo4j', action="store_true",
+                               help="export for neo4j")
     parser_export.set_defaults(func=handle_export)
+
+    # 添加子命令 neo4j
+    parser_neo4j = subparsers.add_parser('neo4j', parents=[parent_parser])
+    parser_neo4j.set_defaults(func=handle_neo4j)
 
     # 开始解析命令
     args = parser.parse_args()
